@@ -16,6 +16,7 @@ import * as Yup from 'yup';
 import Input from '../../components/Input';
 import Button from '../../components/Button';
 import getValidationErrors from '../../utils/getValidationErrors';
+import api from '../../services/api';
 
 import { Container, Title, BackToSignIn, BackToSignInText } from './styles';
 
@@ -51,8 +52,13 @@ const SignUp: React.FC = () => {
           abortEarly: false,
         });
 
-        // await api.post('/users', data);
-        // history.push('/');
+        Alert.alert(
+          'registo efetuado com sucesso',
+          'já pode aceder ao GoBarber'
+        )
+
+        await api.post('/users', data);
+        navigation.goBack();
 
       } catch (err) {
         // console.log(err);
