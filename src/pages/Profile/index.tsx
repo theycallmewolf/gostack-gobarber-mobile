@@ -14,6 +14,7 @@ import { FormHandles } from '@unform/core';
 import * as Yup from 'yup';
 import Icon from 'react-native-vector-icons/Feather';
 import {launchCamera, launchImageLibrary} from 'react-native-image-picker';
+import ImageEditor from "@react-native-community/image-editor";
 
 import Input from '../../components/Input';
 import Button from '../../components/Button';
@@ -46,7 +47,7 @@ interface FormDataContent {
 }
 
 const Profile: React.FC = () => {
-  const { user, updateUser } = useAuth();
+  const { user, updateUser, signOut } = useAuth();
   const formRef = useRef<FormHandles>(null);
   const navigation = useNavigation();
 
@@ -154,28 +155,46 @@ const Profile: React.FC = () => {
         return;
       }
 
-      const data = new FormData();
+      // console.log(response.uri)
 
-      const file = {
-        uri: response.uri,
-        type: 'image/jpeg',
-        name: `${user.id}.jpg`,
-      };
+      ImageEditor.cropImage(response.uri, {
+        offset: {
+          x: 0,
+          y: 0,
+        },
+        size: {
+          width: response.width,
+          height: response.height,
+        },
+        displaySize: {
+          width: 600,
+          height: 600,
+        },
+        resizeMode: 'cover',
+      }).then(fileURI => {
 
-      data.append('avatar', file);
+        const data = new FormData();
 
-      try{
-        api.patch('users/avatar', data, {
-          headers: {
-            "Content-Type": "multipart/form-data",
-          },
-        }).then(apiResponse => {
-          updateUser(apiResponse.data);
-        });
-      } catch(err) {
-        console.log(err)
-      }
+        const file = {
+          uri: fileURI,
+          type: 'image/jpeg',
+          name: `${user.id}.jpg`,
+        };
 
+        data.append('avatar', file);
+
+        try{
+          api.patch('users/avatar', data, {
+            headers: {
+              "Content-Type": "multipart/form-data",
+            },
+          }).then(apiResponse => {
+            updateUser(apiResponse.data);
+          });
+        } catch(err) {
+          console.log(err)
+        }
+      });
     });
   }, [updateUser, user.id]);
 
@@ -262,6 +281,9 @@ const Profile: React.FC = () => {
               />
               <Button onPress={() => formRef.current?.submitForm()}>
                 Confirmar alterações
+              </Button>
+              <Button onPress={signOut}>
+                log out
               </Button>
             </Form>
           </Container>
