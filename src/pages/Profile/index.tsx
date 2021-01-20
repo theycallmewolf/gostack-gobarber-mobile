@@ -13,6 +13,7 @@ import { Form } from '@unform/mobile';
 import { FormHandles } from '@unform/core';
 import * as Yup from 'yup';
 import Icon from 'react-native-vector-icons/Feather';
+import {launchCamera, launchImageLibrary} from 'react-native-image-picker';
 
 import Input from '../../components/Input';
 import Button from '../../components/Button';
@@ -30,14 +31,22 @@ import { useAuth } from '../../hooks/AuthContext';
 
 
 
-interface SignUpFormData {
+interface ProfileFormData {
   name: string;
   email: string;
+  old_password: string;
   password: string;
+  password_confirmation: string;
 }
 
-const SignUp: React.FC = () => {
-  const { user } = useAuth();
+interface FormDataContent {
+  uri: string;
+  type: string;
+  name: string;
+}
+
+const Profile: React.FC = () => {
+  const { user, updateUser } = useAuth();
   const formRef = useRef<FormHandles>(null);
   const navigation = useNavigation();
 
@@ -46,8 +55,8 @@ const SignUp: React.FC = () => {
   const passwordInputRef = useRef<TextInput>(null);
   const confirmPasswordInputRef = useRef<TextInput>(null);
 
-  const handleSignUp = useCallback(
-    async (data: SignUpFormData) => {
+  const handleUpdate = useCallback(
+    async (data: ProfileFormData) => {
       try {
         formRef.current?.setErrors({});
 
@@ -56,19 +65,55 @@ const SignUp: React.FC = () => {
           email: Yup.string()
             .required('Email obrigatório')
             .email('Adicione um email válido'),
-          password: Yup.string().min(6, 'No mínimo 6 dígitos'),
+          old_password: Yup.string(),
+          password: Yup.string().when('old_password', {
+            is: val => !!val.length,
+            then: Yup.string().required('Campo obrigatório'),
+            otherwise: Yup.string(),
+          }),
+          password_confirmation: Yup.string()
+            .when('old_password', {
+              is: val => !!val.length,
+              then: Yup.string().required('Campo obrigatório'),
+              otherwise: Yup.string(),
+            })
+            .oneOf(
+              [Yup.ref('password'), undefined],
+              'Palavra-passe tem de ser a mesma',
+            ),
         });
 
         await schema.validate(data, {
           abortEarly: false,
         });
 
+        const {
+          name,
+          email,
+          old_password,
+          password,
+          password_confirmation,
+        } = data;
+
+        const formData = {
+          name,
+          email,
+          ...(old_password
+            ? {
+                old_password,
+                password,
+                password_confirmation,
+              }
+            : {}),
+        };
+
+        const response = await api.put('profile', formData);
+        updateUser(response.data);
+
         Alert.alert(
-          'registo efetuado com sucesso',
-          'já pode aceder ao GoBarber'
+          'perfil alterado com sucesso',
         )
 
-        await api.post('/users', data);
         navigation.goBack();
 
       } catch (err) {
@@ -81,17 +126,58 @@ const SignUp: React.FC = () => {
         }
 
         Alert.alert(
-          'erro no registo',
-          'ocorreu um erro ao enviar o seu registo. tente novamente'
+          'erro no perfil',
+          'ocorreu um erro atualizar o seu perfil. tente novamente'
         )
       }
     },
-    [navigation],
+    [navigation, updateUser],
   );
 
   const handleGoBack = useCallback(()=>{
     navigation.goBack();
   }, [navigation]);
+
+  const handleUpdateAvatar = useCallback(() => {
+    launchImageLibrary( {
+      mediaType: 'photo',
+      maxWidth: 800,
+      maxHeight: 800,
+      quality: 1,
+    }, (response) => {
+      if(response.didCancel) {
+        return;
+      }
+
+      if (response.errorCode) {
+        Alert.alert('Erro na atualização da sua imagem de perfil');
+        return;
+      }
+
+      const data = new FormData();
+
+      const file = {
+        uri: response.uri,
+        type: 'image/jpeg',
+        name: `${user.id}.jpg`,
+      };
+
+      data.append('avatar', file);
+
+      try{
+        api.patch('users/avatar', data, {
+          headers: {
+            "Content-Type": "multipart/form-data",
+          },
+        }).then(apiResponse => {
+          updateUser(apiResponse.data);
+        });
+      } catch(err) {
+        console.log(err)
+      }
+
+    });
+  }, [updateUser, user.id]);
 
   return (
     <>
@@ -108,14 +194,14 @@ const SignUp: React.FC = () => {
             <BackButton onPress={handleGoBack}>
               <Icon name="chevron-left" size={24} color="#999591" />
             </BackButton>
-            <UserAvatarButton onPress={() => {}}>
+            <UserAvatarButton onPress={handleUpdateAvatar}>
               <UserAvatar source={{ uri : user.avatar_url }} />
             </UserAvatarButton>
             <View>
               <Title>O meu perfil</Title>
             </View>
 
-            <Form ref={formRef} onSubmit={handleSignUp}>
+            <Form initialData={user} ref={formRef} onSubmit={handleUpdate}>
               <Input
                 name="name"
                 icon="user"
@@ -185,4 +271,4 @@ const SignUp: React.FC = () => {
   )
 }
 
-export default SignUp;
+export default Profile;
